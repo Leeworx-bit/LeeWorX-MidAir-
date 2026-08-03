@@ -469,41 +469,12 @@ drawGrid(); drawOrder(); tick();
 
 <!-- ===================== TOUCHLESS OVERLAY ===================== -->
 <script type="module">
-import { FilesetResolver, HandLandmarker }
-  from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+import { TAU, OneEuro, HAND_LINKS, GestureTracker, initHandTracking } from './midair-core.js';
 
-const TAU = Math.PI*2;
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* ---------- one-euro filter ----------
-   Smooths hard when the hand is slow, lets go when it moves fast.
-   Without this the pointer is unusable. Not optional polish. */
-class OneEuro{
-  constructor(minCut=1.1,beta=.012,dCut=1){ this.mc=minCut; this.b=beta; this.dc=dCut; this.x=null; this.dx=0; this.t=null; }
-  a(c,dt){ const tau=1/(TAU*c); return 1/(1+tau/dt); }
-  f(v,t){
-    if(this.x===null){ this.x=v; this.t=t; return v; }
-    const dt=Math.max(1e-3,(t-this.t)/1000); this.t=t;
-    const dr=(v-this.x)/dt;
-    this.dx+=this.a(this.dc,dt)*(dr-this.dx);
-    this.x+=this.a(this.mc+this.b*Math.abs(this.dx),dt)*(v-this.x);
-    return this.x;
-  }
-  reset(){ this.x=null; this.dx=0; this.t=null; }
-}
-
-/* ---------- thresholds ----------
-   Two values per gesture, never one. A single threshold fires repeatedly
-   while the hand hovers on the boundary. Both are divided by hand size so
-   they survive the customer standing closer or further from the screen. */
-const PINCH_ON=.34, PINCH_OFF=.46;
-const FIST_ON=.62,  FIST_OFF=.78;
 const LOST_MS=900;        // hand gone this long -> stand down cleanly
-const REARM_MS=480;       // minimum gap between two selections
-
 const HIT = 'button, [role="button"], a[href], input, select, .tl-hit';
-const LINKS=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
-             [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
 
 const $ = id => document.getElementById(id);
 const video=$('tlVideo');
@@ -513,13 +484,14 @@ const hud=$('tlHud'), dot=$('tlDot'), stateEl=$('tlState'), fpsEl=$('tlFps');
 const coach=$('tlCoach'), gate=$('tlGate'), errEl=$('tlErr');
 
 let landmarker=null, running=false, enabled=false, lastVT=-1;
-let fisted=false, pinching=false, armed=true, seenAt=0;
+let fisted=false, pinching=false, seenAt=0;
 let x=-9999, y=-9999, hover=null, grabPrev=null, scroller=null;
 let bursts=[], pinchAmt=0;
 /* Tuned for pointing at buttons, not for rotating a sphere. Higher cutoff and
    beta = the pointer keeps up with a fast hand, and still sits still when the
    hand is held steady. Lower these and it floats; raise them and it jitters. */
 const fx=new OneEuro(2.2,.035), fy=new OneEuro(2.2,.035);
+const gestureTracker=new GestureTracker({rearmMs:480});
 
 function resize(){
   const dpr=Math.min(devicePixelRatio||1,2);
@@ -586,6 +558,7 @@ function standDown(msg){
   setHover(null);
   x=y=-9999; grabPrev=null; scroller=null;
   fisted=false; pinching=false; pinchAmt=0;
+  gestureTracker.reset();
   fx.reset(); fy.reset();
   dot.className='dot lost';
   stateEl.textContent='No hand';
@@ -593,24 +566,9 @@ function standDown(msg){
 }
 
 async function start(){
-  errEl.textContent=''; let step='';
+  errEl.textContent='';
   try{
-    if(!isSecureContext) throw new Error('INSECURE');
-    step='runtime';
-    const vision=await FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
-    step='model';
-    landmarker=await HandLandmarker.createFromOptions(vision,{
-      baseOptions:{
-        modelAssetPath:"https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-        delegate:"GPU"},
-      runningMode:"VIDEO", numHands:1,
-      minHandDetectionConfidence:.5, minTrackingConfidence:.5
-    });
-    step='camera';
-    video.srcObject=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:'user', width:{ideal:1280}, height:{ideal:720}}, audio:false});
-    await video.play();
+    landmarker=await initHandTracking(video);
     enabled=true; running=true;
     gate.classList.add('off');
     hud.classList.remove('hide'); pre.classList.add('on');
@@ -618,13 +576,12 @@ async function start(){
     say('Raise your hand, palm to the screen');
     requestAnimationFrame(loop);
   }catch(e){
-    console.error(step,e);
-    const m=(e&&e.message)?e.message:String(e);
-    if(m==='INSECURE') errEl.textContent='Hand control needs https. A camera cannot be opened from a file:// page or inside an embedded preview. Open this on its hosted address.';
-    else if(step==='runtime') errEl.textContent='The tracking runtime did not load. If this page is embedded in another app, open it directly in a browser.';
-    else if(step==='model') errEl.textContent='The runtime loaded but the model was blocked. Host hand_landmarker.task next to this file to run offline.';
-    else if(e&&e.name==='NotAllowedError') errEl.textContent='Camera permission was declined. The touchscreen still works, or allow the camera in browser settings and reload.';
-    else errEl.textContent='Stopped at "'+step+'": '+m;
+    console.error(e.stage,e);
+    if(e.stage==='secure') errEl.textContent='Hand control needs https. A camera cannot be opened from a file:// page or inside an embedded preview. Open this on its hosted address.';
+    else if(e.stage==='runtime') errEl.textContent='The tracking runtime did not load. If this page is embedded in another app, open it directly in a browser.';
+    else if(e.stage==='model') errEl.textContent='The runtime loaded but the model was blocked. Host hand_landmarker.task next to this file to run offline.';
+    else if(e.cause&&e.cause.name==='NotAllowedError') errEl.textContent='Camera permission was declined. The touchscreen still works, or allow the camera in browser settings and reload.';
+    else errEl.textContent='Stopped at "'+e.stage+'": '+e.message;
   }
 }
 $('tlAllow').addEventListener('click',start);
@@ -672,23 +629,17 @@ function read(now){
   const px=i=>span(1-lm[i].x, AX0, AX1)*W;
   const py=i=>span(lm[i].y,   AY0, AY1)*H;
 
+  const gs=gestureTracker.update(lm);
+  fisted=gs.fisted; pinching=gs.pinching; pinchAmt=gs.pinchAmt;
+
   /* skeleton, in the corner preview only — the menu stays clean */
   pctx.strokeStyle=fisted?'rgba(226,86,43,.9)':'rgba(240,233,223,.75)';
   pctx.lineWidth=1.2; pctx.beginPath();
-  for(const [a,b] of LINKS){
+  for(const [a,b] of HAND_LINKS){
     pctx.moveTo((1-lm[a].x)*132, lm[a].y*99);
     pctx.lineTo((1-lm[b].x)*132, lm[b].y*99);
   }
   pctx.stroke();
-
-  const size=Math.hypot(lm[0].x-lm[9].x, lm[0].y-lm[9].y)||1;
-  const pinchR=Math.hypot(lm[4].x-lm[8].x, lm[4].y-lm[8].y)/size;
-  let curl=0;
-  for(const t of [8,12,16,20]) curl+=Math.hypot(lm[t].x-lm[0].x, lm[t].y-lm[0].y);
-  curl=(curl/4)/size;
-
-  if(curl<FIST_ON) fisted=true; else if(curl>FIST_OFF) fisted=false;
-  pinchAmt=Math.max(0,Math.min(1,(PINCH_OFF-pinchR)/(PINCH_OFF-PINCH_ON)));
 
   dot.className='dot live';
 
@@ -711,15 +662,10 @@ function read(now){
   x=fx.f(px(8),now); y=fy.f(py(8),now);      // pointer rides the index fingertip
   setHover(elementAt(x,y));
 
-  if(pinchR<PINCH_ON && !pinching){
-    pinching=true;
-    if(armed){
-      armed=false;
-      const hit=commit(x,y);
-      setTimeout(()=>{ armed=true; }, REARM_MS);
-      if(!hit) say('Point at a button first', 1100);
-    }
-  }else if(pinchR>PINCH_OFF && pinching){ pinching=false; }
+  if(gs.justPinched){
+    const hit=commit(x,y);
+    if(!hit) say('Point at a button first', 1100);
+  }
 
   stateEl.textContent = hover ? 'On a button' : 'Pointing';
   say(hover ? 'Pinch to choose' : '');
