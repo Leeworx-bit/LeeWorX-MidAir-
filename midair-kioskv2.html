@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Kota &amp; Co — self-service kiosk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ==========================================================================
+   PART 1 — THE KIOSK
+   An ordinary self-service ordering page. Plain HTML, plain buttons, plain
+   click handlers. It contains no gesture code and does not know the overlay
+   exists. This is the point of the demo.
+   ========================================================================== */
+:root{
+  --ink:#171310;
+  --paper:#faf6f0;
+  --sand:#ece3d6;
+  --line:#d9cdbc;
+  --flame:#e2562b;
+  --leaf:#126b52;
+  --mute:#6f6459;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+html,body{height:100%; margin:0; overflow:hidden}
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:'Archivo',system-ui,sans-serif; font-weight:500;
+  -webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit; cursor:pointer; border:none; background:none; color:inherit}
+:focus-visible{outline:3px solid var(--flame); outline-offset:3px}
+
+#kiosk{display:flex; flex-direction:column; height:100%}
+
+/* ---- masthead ---- */
+.mast{
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  padding:16px 26px; background:var(--ink); color:var(--paper); flex:none;
+}
+.mark{display:flex; align-items:baseline; gap:10px}
+.mark b{font-family:'Archivo Black',sans-serif; font-size:26px; letter-spacing:-.02em}
+.mark span{font-size:11px; letter-spacing:.24em; text-transform:uppercase; color:#a99c8e}
+.mast .clock{font-family:'IBM Plex Mono',monospace; font-size:12px; color:#a99c8e}
+
+/* ---- category tabs ---- */
+.tabs{
+  display:flex; gap:10px; padding:14px 26px; flex:none;
+  background:var(--paper); border-bottom:1px solid var(--line); overflow-x:auto;
+}
+.tab{
+  flex:none; padding:16px 26px; border-radius:999px; background:var(--sand);
+  font-size:16px; font-weight:600; letter-spacing:.01em; min-height:56px;
+  transition:background .15s, color .15s;
+}
+.tab[aria-selected="true"]{background:var(--ink); color:var(--paper)}
+
+/* ---- body split ---- */
+.split{display:flex; flex:1; min-height:0}
+
+#grid{
+  flex:1; min-width:0; overflow-y:auto; padding:22px 26px 40px;
+  display:grid; gap:18px;
+  grid-template-columns:repeat(auto-fill,minmax(232px,1fr));
+  align-content:start; scroll-behavior:smooth;
+}
+.card{
+  display:flex; flex-direction:column; align-items:stretch; text-align:left;
+  background:#fff; border:1px solid var(--line); border-radius:14px;
+  padding:16px; min-height:210px; transition:transform .12s, border-color .12s;
+}
+.card:active{transform:scale(.985)}
+.plate{
+  height:96px; border-radius:10px; background:var(--sand);
+  display:flex; align-items:center; justify-content:center; font-size:52px;
+  line-height:1; margin-bottom:14px;
+}
+.card h3{margin:0 0 4px; font-size:18px; font-weight:700; letter-spacing:-.01em}
+.card p{margin:0; font-size:13px; line-height:1.45; color:var(--mute)}
+.card .price{
+  margin-top:auto; padding-top:12px;
+  font-family:'Archivo Black',sans-serif; font-size:21px; letter-spacing:-.01em;
+}
+
+/* ---- order rail ---- */
+#rail{
+  flex:none; width:330px; background:#fff; border-left:1px solid var(--line);
+  display:flex; flex-direction:column;
+}
+.rail-h{padding:20px 22px 14px; border-bottom:1px solid var(--line)}
+.rail-h h2{margin:0; font-size:13px; letter-spacing:.2em; text-transform:uppercase; color:var(--mute)}
+#lines{flex:1; overflow-y:auto; padding:8px 22px}
+.empty{padding:34px 0; font-size:14px; line-height:1.6; color:var(--mute)}
+.line{display:flex; gap:12px; align-items:flex-start; padding:14px 0; border-bottom:1px solid var(--sand)}
+.line .qty{
+  font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:500;
+  background:var(--sand); border-radius:6px; padding:4px 8px; flex:none;
+}
+.line .desc{flex:1; min-width:0}
+.line .desc b{display:block; font-size:15px; font-weight:600}
+.line .desc small{display:block; font-size:12px; color:var(--mute); line-height:1.5; margin-top:2px}
+.line .amt{font-weight:700; font-size:15px; flex:none}
+.line .rm{
+  flex:none; width:44px; height:44px; border-radius:10px; background:var(--sand);
+  font-size:18px; line-height:1; color:var(--mute);
+}
+.totals{padding:16px 22px; border-top:1px solid var(--line); font-size:13px; color:var(--mute)}
+.totals .grand{
+  display:flex; justify-content:space-between; align-items:baseline;
+  color:var(--ink); margin-bottom:4px;
+}
+.totals .grand b{font-family:'Archivo Black',sans-serif; font-size:26px}
+.pay{
+  margin:0 22px 22px; padding:22px; border-radius:12px; min-height:72px;
+  background:var(--flame); color:#fff; font-size:18px; font-weight:700;
+  letter-spacing:.01em;
+}
+.pay[disabled]{background:var(--sand); color:var(--mute); cursor:default}
+
+/* ---- item sheet ---- */
+#sheet{
+  position:fixed; inset:0; z-index:40; display:none;
+  background:rgba(23,19,16,.5); align-items:center; justify-content:center; padding:24px;
+}
+#sheet.open{display:flex}
+.sheet-in{
+  background:var(--paper); border-radius:18px; width:min(520px,100%);
+  max-height:100%; overflow-y:auto; padding:26px;
+}
+.sheet-in h3{margin:0 0 6px; font-family:'Archivo Black',sans-serif; font-size:27px; letter-spacing:-.02em}
+.sheet-in .sub{margin:0 0 22px; font-size:14px; color:var(--mute); line-height:1.5}
+.grp{margin-bottom:22px}
+.grp h4{margin:0 0 10px; font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--mute)}
+.opts{display:flex; flex-wrap:wrap; gap:10px}
+.opt{
+  padding:16px 20px; min-height:58px; border-radius:10px;
+  background:#fff; border:1px solid var(--line); font-size:15px; font-weight:600;
+}
+.opt[aria-pressed="true"]{background:var(--ink); color:var(--paper); border-color:var(--ink)}
+.opt em{font-style:normal; font-weight:500; opacity:.65; margin-left:6px}
+.stepper{display:flex; align-items:center; gap:14px}
+.stepper button{
+  width:64px; height:64px; border-radius:12px; background:#fff;
+  border:1px solid var(--line); font-size:26px; font-weight:700;
+}
+.stepper span{font-family:'Archivo Black',sans-serif; font-size:26px; min-width:38px; text-align:center}
+.sheet-act{display:flex; gap:12px; margin-top:6px}
+.sheet-act button{flex:1; padding:22px; min-height:72px; border-radius:12px; font-size:17px; font-weight:700}
+.sheet-act .cancel{background:var(--sand); color:var(--ink)}
+.sheet-act .add{background:var(--leaf); color:#fff}
+
+/* ---- done screen ---- */
+#done{
+  position:fixed; inset:0; z-index:45; display:none;
+  background:var(--ink); color:var(--paper);
+  flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:30px; text-align:center;
+}
+#done.open{display:flex}
+#done .num{font-family:'Archivo Black',sans-serif; font-size:clamp(72px,18vw,150px); line-height:.9; color:var(--flame)}
+#done p{margin:0; font-size:16px; color:#a99c8e; max-width:34ch; line-height:1.6}
+#done button{padding:20px 40px; min-height:66px; border-radius:12px; background:var(--paper); color:var(--ink); font-size:16px; font-weight:700}
+
+@media (max-width:880px){
+  .split{flex-direction:column}
+  #rail{width:100%; border-left:none; border-top:1px solid var(--line); max-height:46%}
+  #grid{padding:18px}
+}
+
+/* ==========================================================================
+   PART 2 — THE TOUCHLESS OVERLAY
+   Everything below is the product layer. It is self-contained, sits on top,
+   and drives the page above using ordinary DOM events. Removing this block
+   leaves a working touchscreen kiosk.
+   ========================================================================== */
+#tlVideo{position:fixed; width:2px; height:2px; opacity:.01; pointer-events:none; top:0; left:0}
+#tlCursor{position:fixed; inset:0; z-index:60; pointer-events:none}
+
+#tlHud{
+  position:fixed; left:0; bottom:0; z-index:61;
+  display:flex; align-items:center; gap:14px; padding:9px 16px;
+  background:rgba(23,19,16,.9); color:#f0e9df; border-top-right-radius:12px;
+  font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em;
+}
+#tlHud.hide{display:none}
+#tlHud .dot{width:8px; height:8px; border-radius:50%; background:#6f6459; flex:none}
+#tlHud .dot.live{background:#3fd39a}
+#tlHud .dot.lost{background:#e2562b}
+#tlHud button{
+  pointer-events:auto; font-family:inherit; font-size:11px; letter-spacing:.06em;
+  padding:7px 12px; border-radius:6px; background:rgba(240,233,223,.12); color:#f0e9df;
+}
+#tlPreview{
+  position:fixed; right:14px; bottom:14px; z-index:61; width:132px; height:99px;
+  border-radius:10px; background:#171310; pointer-events:none; display:none;
+  box-shadow:0 6px 24px rgba(23,19,16,.28);
+}
+#tlPreview.on{display:block}
+
+#tlCoach{
+  position:fixed; left:50%; bottom:74px; transform:translateX(-50%);
+  z-index:61; pointer-events:none; padding:12px 20px; border-radius:999px;
+  background:rgba(23,19,16,.9); color:#f0e9df;
+  font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em;
+  opacity:0; transition:opacity .3s; white-space:nowrap; max-width:92vw;
+}
+#tlCoach.show{opacity:1}
+
+/* injected hover state — the kiosk does not define this */
+.tl-hover{box-shadow:0 0 0 4px rgba(226,86,43,.9), 0 8px 26px rgba(23,19,16,.16) !important}
+
+/* consent gate */
+#tlGate{
+  position:fixed; inset:0; z-index:80; background:var(--ink); color:#f0e9df;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:20px; padding:30px; text-align:center; overflow-y:auto;
+}
+#tlGate.off{display:none}
+#tlGate h1{margin:0; font-family:'Archivo Black',sans-serif; font-size:clamp(24px,5.6vw,38px); letter-spacing:-.02em}
+#tlGate .lead{margin:0; max-width:40ch; font-size:14px; line-height:1.7; color:#a99c8e}
+.tl-priv{border:1px solid rgba(240,233,223,.18); border-radius:10px; padding:18px 20px; max-width:44ch; text-align:left}
+.tl-priv p{margin:0 0 9px; padding-left:16px; position:relative; font-size:12px; line-height:1.85; color:#a99c8e}
+.tl-priv p:last-child{margin-bottom:0}
+.tl-priv p::before{content:'—'; position:absolute; left:0; color:#6f6459}
+.tl-priv b{color:#f0e9df; font-weight:600}
+.tl-btns{display:flex; flex-direction:column; gap:11px; width:min(320px,100%)}
+.tl-btns button{padding:18px 26px; min-height:60px; border-radius:10px; font-size:14px; font-weight:700}
+.tl-btns .go{background:#f0e9df; color:var(--ink)}
+.tl-btns .no{background:transparent; color:#a99c8e; border:1px solid rgba(240,233,223,.24)}
+#tlErr{margin:0; max-width:42ch; font-size:12px; line-height:1.7; color:#ff9a72}
+
+@media (prefers-reduced-motion:reduce){
+  *{transition:none !important; scroll-behavior:auto !important}
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== KIOSK MARKUP (gesture-unaware) ===================== -->
+<div id="kiosk">
+  <header class="mast">
+    <div class="mark"><b>KOTA &amp; CO</b><span>Order here</span></div>
+    <div class="clock" id="clock">--:--</div>
+  </header>
+
+  <nav class="tabs" id="tabs" aria-label="Menu categories"></nav>
+
+  <div class="split">
+    <main id="grid" aria-label="Menu items"></main>
+
+    <aside id="rail" aria-label="Your order">
+      <div class="rail-h"><h2>Your order</h2></div>
+      <div id="lines"></div>
+      <div class="totals">
+        <div class="grand"><span>Total</span><b id="grand">R0</b></div>
+        <div id="vat">Includes VAT R0.00</div>
+      </div>
+      <button class="pay" id="pay" disabled>Add something to start</button>
+    </aside>
+  </div>
+</div>
+
+<div id="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-name">
+  <div class="sheet-in">
+    <h3 id="sh-name"></h3>
+    <p class="sub" id="sh-sub"></p>
+    <div class="grp"><h4>Size</h4><div class="opts" id="sh-size"></div></div>
+    <div class="grp"><h4>Add extras</h4><div class="opts" id="sh-ext"></div></div>
+    <div class="grp"><h4>How many</h4>
+      <div class="stepper">
+        <button id="sh-less" aria-label="One fewer">−</button>
+        <span id="sh-qty">1</span>
+        <button id="sh-more" aria-label="One more">+</button>
+      </div>
+    </div>
+    <div class="sheet-act">
+      <button class="cancel" id="sh-cancel">Cancel</button>
+      <button class="add" id="sh-add">Add to order</button>
+    </div>
+  </div>
+</div>
+
+<div id="done">
+  <p>Your order number</p>
+  <div class="num" id="done-num">—</div>
+  <p>Take your slip and collect at the counter when your number is called.</p>
+  <button id="done-ok">Start a new order</button>
+</div>
+
+<!-- ===================== OVERLAY MARKUP ===================== -->
+<video id="tlVideo" playsinline muted autoplay></video>
+<canvas id="tlCursor"></canvas>
+<canvas id="tlPreview"></canvas>
+<div id="tlCoach"></div>
+
+<div id="tlHud" class="hide">
+  <span class="dot" id="tlDot"></span>
+  <span id="tlState">Touch only</span>
+  <span id="tlFps">—</span>
+  <button id="tlToggle">Turn off</button>
+</div>
+
+<div id="tlGate">
+  <h1>Order without touching the screen</h1>
+  <p class="lead">Hold your hand up in front of the kiosk to move the pointer. Pinch your thumb and finger together to choose. The screen still works by touch at any time.</p>
+  <div class="tl-priv">
+    <p>The camera is read <b>entirely on this device</b>, inside the browser. No video is uploaded.</p>
+    <p>There is <b>no server, no account and no network connection</b> carrying the picture, so there is nothing to intercept.</p>
+    <p>Nothing is stored. Each frame is measured for hand position and <b>discarded immediately</b>.</p>
+    <p>Only <b>hand shape</b> is measured. No faces are detected, matched or kept.</p>
+    <p>No personal information leaves the kiosk, which keeps this outside the scope of POPIA processing consent.</p>
+  </div>
+  <div class="tl-btns">
+    <button class="go" id="tlAllow">Use hand control</button>
+    <button class="no" id="tlSkip">Use the touchscreen</button>
+  </div>
+  <p id="tlErr"></p>
+</div>
+
+<!-- ===================== KIOSK LOGIC (ordinary click handlers) ===================== -->
+<script>
+const MENU = {
+  Kotas:[
+    {e:'🥪', n:'Classic Kota',    d:'Quarter loaf, chips, polony, atchar.',        p:45},
+    {e:'🥙', n:'Full House Kota', d:'Chips, polony, russian, egg, cheese, atchar.', p:72},
+    {e:'🌶️', n:'Chakalaka Kota',  d:'Chips, chakalaka, cheese, pickled onion.',    p:55},
+    {e:'🍛', n:'Bunny Chow',      d:'Half loaf, mutton curry, carrot salad.',      p:79}
+  ],
+  Grills:[
+    {e:'🌭', n:'Boerewors Roll',  d:'Flame-grilled wors, tomato relish, mustard.', p:48},
+    {e:'🍔', n:'Flame Burger',    d:'Beef patty, cheese, onion, house sauce.',     p:65},
+    {e:'🍗', n:'Chicken Dagwood', d:'Peri chicken, lettuce, mayo, toasted roll.',  p:58},
+    {e:'🥩', n:'Steak Roll',      d:'Sirloin strips, caramelised onion, rocket.',  p:88}
+  ],
+  Sides:[
+    {e:'🍟', n:'Slap Chips',      d:'Salt and vinegar, soft and hot.',             p:28},
+    {e:'🧀', n:'Cheese Chips',    d:'Slap chips under melted cheddar.',            p:38},
+    {e:'🥯', n:'Vetkoek',         d:'Two, with butter and syrup.',                 p:22},
+    {e:'🥗', n:'Coleslaw',        d:'Cabbage, carrot, buttermilk dressing.',       p:24}
+  ],
+  Drinks:[
+    {e:'🥤', n:'Stoney 300ml',    d:'Ginger beer, ice cold.',                      p:18},
+    {e:'🍦', n:'Creme Soda Float',d:'Green cream soda, vanilla scoop.',            p:32},
+    {e:'🧊', n:'Rooibos Iced Tea',d:'Brewed daily, lemon and mint.',               p:26},
+    {e:'☕', n:'Filter Coffee',    d:'Americano, milk on the side.',                p:20}
+  ]
+};
+const SIZES = [{n:'Regular',p:0},{n:'Large',p:12}];
+const EXTRAS = [{n:'Extra cheese',p:8},{n:'Russian',p:15},{n:'Extra chakalaka',p:6},{n:'Fried egg',p:7}];
+
+const rand = n => Math.floor(Math.random()*n);
+let cat = 'Kotas', order = [], sheetItem = null, sheetSize = 0, sheetExt = [], sheetQty = 1;
+
+const $ = id => document.getElementById(id);
+const money = c => 'R' + c;
+
+/* tabs */
+Object.keys(MENU).forEach(k=>{
+  const b = document.createElement('button');
+  b.className='tab'; b.textContent=k; b.setAttribute('role','tab');
+  b.setAttribute('aria-selected', k===cat);
+  b.addEventListener('click', ()=>{
+    cat=k;
+    [...$('tabs').children].forEach(t=>t.setAttribute('aria-selected', t.textContent===k));
+    drawGrid(); $('grid').scrollTop=0;
+  });
+  $('tabs').appendChild(b);
+});
+
+function drawGrid(){
+  const g = $('grid'); g.innerHTML='';
+  MENU[cat].forEach(it=>{
+    const c = document.createElement('button');
+    c.className='card';
+    c.innerHTML = '<div class="plate">'+it.e+'</div><h3></h3><p></p><div class="price">'+money(it.p)+'</div>';
+    c.querySelector('h3').textContent = it.n;
+    c.querySelector('p').textContent = it.d;
+    c.addEventListener('click', ()=>openSheet(it));
+    g.appendChild(c);
+  });
+}
+
+/* item sheet */
+function openSheet(it){
+  sheetItem=it; sheetSize=0; sheetExt=[]; sheetQty=1;
+  $('sh-name').textContent = it.n;
+  $('sh-sub').textContent = it.d;
+
+  const sz = $('sh-size'); sz.innerHTML='';
+  SIZES.forEach((s,i)=>{
+    const b=document.createElement('button');
+    b.className='opt'; b.setAttribute('aria-pressed', i===0);
+    b.innerHTML = s.n + (s.p?' <em>+'+money(s.p)+'</em>':'');
+    b.addEventListener('click',()=>{
+      sheetSize=i;
+      [...sz.children].forEach((x,j)=>x.setAttribute('aria-pressed', j===i));
+    });
+    sz.appendChild(b);
+  });
+
+  const ex = $('sh-ext'); ex.innerHTML='';
+  EXTRAS.forEach((e,i)=>{
+    const b=document.createElement('button');
+    b.className='opt'; b.setAttribute('aria-pressed','false');
+    b.innerHTML = e.n + ' <em>+'+money(e.p)+'</em>';
+    b.addEventListener('click',()=>{
+      const at=sheetExt.indexOf(i);
+      if(at<0) sheetExt.push(i); else sheetExt.splice(at,1);
+      b.setAttribute('aria-pressed', sheetExt.includes(i));
+    });
+    ex.appendChild(b);
+  });
+
+  $('sh-qty').textContent='1';
+  $('sheet').classList.add('open');
+}
+$('sh-less').addEventListener('click',()=>{ sheetQty=Math.max(1,sheetQty-1); $('sh-qty').textContent=sheetQty; });
+$('sh-more').addEventListener('click',()=>{ sheetQty=Math.min(9,sheetQty+1); $('sh-qty').textContent=sheetQty; });
+$('sh-cancel').addEventListener('click',()=>$('sheet').classList.remove('open'));
+$('sh-add').addEventListener('click',()=>{
+  const each = sheetItem.p + SIZES[sheetSize].p + sheetExt.reduce((s,i)=>s+EXTRAS[i].p,0);
+  const note = [SIZES[sheetSize].n, ...sheetExt.map(i=>EXTRAS[i].n)].filter(x=>x!=='Regular').join(' · ');
+  order.push({ name:sheetItem.n, note, each, qty:sheetQty });
+  $('sheet').classList.remove('open');
+  drawOrder();
+});
+addEventListener('keydown',e=>{ if(e.key==='Escape') $('sheet').classList.remove('open'); });
+
+/* order rail */
+function drawOrder(){
+  const box=$('lines'); box.innerHTML='';
+  if(!order.length){
+    const p=document.createElement('p'); p.className='empty';
+    p.textContent='Nothing here yet. Choose something from the menu to begin.';
+    box.appendChild(p);
+  }
+  order.forEach((l,i)=>{
+    const row=document.createElement('div'); row.className='line';
+    row.innerHTML='<span class="qty">×'+l.qty+'</span><span class="desc"><b></b><small></small></span>'
+                + '<span class="amt">'+money(l.each*l.qty)+'</span>'
+                + '<button class="rm" aria-label="Remove">✕</button>';
+    row.querySelector('b').textContent=l.name;
+    row.querySelector('small').textContent=l.note;
+    row.querySelector('.rm').addEventListener('click',()=>{ order.splice(i,1); drawOrder(); });
+    box.appendChild(row);
+  });
+  const total = order.reduce((s,l)=>s+l.each*l.qty,0);
+  $('grand').textContent = money(total);
+  $('vat').textContent = 'Includes VAT R' + (total*15/115).toFixed(2);
+  const pay=$('pay');
+  pay.disabled = !total;
+  pay.textContent = total ? 'Pay ' + money(total) : 'Add something to start';
+}
+$('pay').addEventListener('click',()=>{
+  $('done-num').textContent = 100 + rand(800);
+  $('done').classList.add('open');
+});
+$('done-ok').addEventListener('click',()=>{
+  order=[]; drawOrder(); $('done').classList.remove('open');
+});
+
+function tick(){
+  $('clock').textContent = new Date().toTimeString().slice(0,5);
+  setTimeout(tick, 20000);
+}
+drawGrid(); drawOrder(); tick();
+</script>
+
+<!-- ===================== TOUCHLESS OVERLAY ===================== -->
+<script type="module">
+import { FilesetResolver, HandLandmarker }
+  from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+
+const TAU = Math.PI*2;
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- one-euro filter ----------
+   Smooths hard when the hand is slow, lets go when it moves fast.
+   Without this the pointer is unusable. Not optional polish. */
+class OneEuro{
+  constructor(minCut=1.1,beta=.012,dCut=1){ this.mc=minCut; this.b=beta; this.dc=dCut; this.x=null; this.dx=0; this.t=null; }
+  a(c,dt){ const tau=1/(TAU*c); return 1/(1+tau/dt); }
+  f(v,t){
+    if(this.x===null){ this.x=v; this.t=t; return v; }
+    const dt=Math.max(1e-3,(t-this.t)/1000); this.t=t;
+    const dr=(v-this.x)/dt;
+    this.dx+=this.a(this.dc,dt)*(dr-this.dx);
+    this.x+=this.a(this.mc+this.b*Math.abs(this.dx),dt)*(v-this.x);
+    return this.x;
+  }
+  reset(){ this.x=null; this.dx=0; this.t=null; }
+}
+
+/* ---------- thresholds ----------
+   Two values per gesture, never one. A single threshold fires repeatedly
+   while the hand hovers on the boundary. Both are divided by hand size so
+   they survive the customer standing closer or further from the screen. */
+const PINCH_ON=.34, PINCH_OFF=.46;
+const FIST_ON=.62,  FIST_OFF=.78;
+const LOST_MS=900;        // hand gone this long -> stand down cleanly
+const REARM_MS=480;       // minimum gap between two selections
+
+const HIT = 'button, [role="button"], a[href], input, select, .tl-hit';
+const LINKS=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+             [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+
+const $ = id => document.getElementById(id);
+const video=$('tlVideo');
+const cur=$('tlCursor'), cctx=cur.getContext('2d');
+const pre=$('tlPreview'), pctx=pre.getContext('2d');
+const hud=$('tlHud'), dot=$('tlDot'), stateEl=$('tlState'), fpsEl=$('tlFps');
+const coach=$('tlCoach'), gate=$('tlGate'), errEl=$('tlErr');
+
+let landmarker=null, running=false, enabled=false, lastVT=-1;
+let fisted=false, pinching=false, armed=true, seenAt=0;
+let x=-9999, y=-9999, hover=null, grabPrev=null, scroller=null;
+let bursts=[], pinchAmt=0;
+/* Tuned for pointing at buttons, not for rotating a sphere. Higher cutoff and
+   beta = the pointer keeps up with a fast hand, and still sits still when the
+   hand is held steady. Lower these and it floats; raise them and it jitters. */
+const fx=new OneEuro(2.2,.035), fy=new OneEuro(2.2,.035);
+
+function resize(){
+  const dpr=Math.min(devicePixelRatio||1,2);
+  cur.width=innerWidth*dpr; cur.height=innerHeight*dpr;
+  cur.style.width=innerWidth+'px'; cur.style.height=innerHeight+'px';
+  cctx.setTransform(dpr,0,0,dpr,0,0);
+  pre.width=132*dpr; pre.height=99*dpr;
+  pre.style.width='132px'; pre.style.height='99px';
+  pctx.setTransform(dpr,0,0,dpr,0,0);
+}
+addEventListener('resize',resize); resize();
+
+let coachUntil=0;
+function say(msg, holdMs){
+  if(performance.now()<coachUntil && !holdMs) return;   // let a transient hint finish
+  coachUntil = holdMs ? performance.now()+holdMs : 0;
+  if(!msg){ coach.classList.remove('show'); return; }
+  if(coach.textContent!==msg) coach.textContent=msg;
+  coach.classList.add('show');
+}
+
+/* ---------- driving the page underneath ----------
+   The kiosk has no idea this exists. We find whatever sits at the pointer
+   and send it the same events a finger would. Any existing web kiosk works
+   unmodified — that is the whole integration story. */
+function elementAt(px,py){
+  const el=document.elementFromPoint(px,py);
+  return el ? el.closest(HIT) : null;
+}
+function setHover(el){
+  if(el===hover) return;
+  if(hover) hover.classList.remove('tl-hover');
+  hover=el;
+  if(hover) hover.classList.add('tl-hover');
+}
+function commit(px,py){
+  const el=elementAt(px,py);
+  if(!el || el.disabled) return false;
+  const o={bubbles:true, cancelable:true, composed:true, clientX:px, clientY:py,
+           pointerId:77, pointerType:'touch', isPrimary:true, button:0, buttons:1};
+  el.dispatchEvent(new PointerEvent('pointerdown',o));
+  el.dispatchEvent(new MouseEvent('mousedown',o));
+  try{ el.focus({preventScroll:true}); }catch(e){}
+  el.dispatchEvent(new PointerEvent('pointerup',{...o,buttons:0}));
+  el.dispatchEvent(new MouseEvent('mouseup',{...o,buttons:0}));
+  el.dispatchEvent(new MouseEvent('click',{...o,buttons:0}));
+  bursts.push({x:px,y:py,r:16,life:1});
+  return true;
+}
+function findScroller(el){
+  let n=el;
+  while(n && n!==document.body){
+    const s=getComputedStyle(n);
+    if(n.scrollHeight>n.clientHeight+4 && /auto|scroll/.test(s.overflowY)) return n;
+    n=n.parentElement;
+  }
+  return null;
+}
+
+/* ---------- standing down ----------
+   Losing the hand must never leave a stuck highlight or a frozen pointer.
+   Everything resets and the kiosk goes back to being a touchscreen. */
+function standDown(msg){
+  setHover(null);
+  x=y=-9999; grabPrev=null; scroller=null;
+  fisted=false; pinching=false; pinchAmt=0;
+  fx.reset(); fy.reset();
+  dot.className='dot lost';
+  stateEl.textContent='No hand';
+  coachUntil=0; say(msg);
+}
+
+async function start(){
+  errEl.textContent=''; let step='';
+  try{
+    if(!isSecureContext) throw new Error('INSECURE');
+    step='runtime';
+    const vision=await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+    step='model';
+    landmarker=await HandLandmarker.createFromOptions(vision,{
+      baseOptions:{
+        modelAssetPath:"https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+        delegate:"GPU"},
+      runningMode:"VIDEO", numHands:1,
+      minHandDetectionConfidence:.5, minTrackingConfidence:.5
+    });
+    step='camera';
+    video.srcObject=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'user', width:{ideal:1280}, height:{ideal:720}}, audio:false});
+    await video.play();
+    enabled=true; running=true;
+    gate.classList.add('off');
+    hud.classList.remove('hide'); pre.classList.add('on');
+    $('tlToggle').textContent='Turn off';
+    say('Raise your hand, palm to the screen');
+    requestAnimationFrame(loop);
+  }catch(e){
+    console.error(step,e);
+    const m=(e&&e.message)?e.message:String(e);
+    if(m==='INSECURE') errEl.textContent='Hand control needs https. A camera cannot be opened from a file:// page or inside an embedded preview. Open this on its hosted address.';
+    else if(step==='runtime') errEl.textContent='The tracking runtime did not load. If this page is embedded in another app, open it directly in a browser.';
+    else if(step==='model') errEl.textContent='The runtime loaded but the model was blocked. Host hand_landmarker.task next to this file to run offline.';
+    else if(e&&e.name==='NotAllowedError') errEl.textContent='Camera permission was declined. The touchscreen still works, or allow the camera in browser settings and reload.';
+    else errEl.textContent='Stopped at "'+step+'": '+m;
+  }
+}
+$('tlAllow').addEventListener('click',start);
+$('tlSkip').addEventListener('click',()=>{
+  gate.classList.add('off');
+  hud.classList.remove('hide');
+  stateEl.textContent='Touch only';
+  $('tlToggle').textContent='Turn on';
+});
+$('tlToggle').addEventListener('click',()=>{
+  if(!enabled){ gate.classList.remove('off'); return; }
+  running=!running;
+  $('tlToggle').textContent = running ? 'Turn off' : 'Turn on';
+  pre.classList.toggle('on', running);
+  if(running){ say('Raise your hand, palm to the screen'); requestAnimationFrame(loop); }
+  else { standDown(''); cctx.clearRect(0,0,innerWidth,innerHeight);
+         pctx.clearRect(0,0,132,99); dot.className='dot';
+         stateEl.textContent='Paused — touch still works'; }
+});
+
+/* ---------- read the hand ---------- */
+function read(now){
+  if(video.currentTime===lastVT || video.readyState<2) return;
+  lastVT=video.currentTime;
+  const res=landmarker.detectForVideo(video,now);
+
+  pctx.clearRect(0,0,132,99);
+  pctx.save(); pctx.translate(132,0); pctx.scale(-1,1);
+  pctx.globalAlpha=.55; pctx.drawImage(video,0,0,132,99); pctx.globalAlpha=1;
+  pctx.restore();
+
+  if(!res.landmarks||!res.landmarks.length){
+    if(now-seenAt>LOST_MS) standDown('Raise your hand, palm to the screen');
+    return;
+  }
+  seenAt=now;
+  const lm=res.landmarks[0];
+  const W=innerWidth, H=innerHeight;
+  /* Active region: the middle of the frame drives the whole screen. Without
+     this you must hold your hand at the very edge of the camera's view to
+     reach a corner button — which is exactly where tracking is least reliable.
+     Widen these numbers for a bigger screen, narrow them for less reaching. */
+  const AX0=.18, AX1=.82, AY0=.14, AY1=.86;
+  const span=(v,a,b)=>Math.max(0,Math.min(1,(v-a)/(b-a)));
+  const px=i=>span(1-lm[i].x, AX0, AX1)*W;
+  const py=i=>span(lm[i].y,   AY0, AY1)*H;
+
+  /* skeleton, in the corner preview only — the menu stays clean */
+  pctx.strokeStyle=fisted?'rgba(226,86,43,.9)':'rgba(240,233,223,.75)';
+  pctx.lineWidth=1.2; pctx.beginPath();
+  for(const [a,b] of LINKS){
+    pctx.moveTo((1-lm[a].x)*132, lm[a].y*99);
+    pctx.lineTo((1-lm[b].x)*132, lm[b].y*99);
+  }
+  pctx.stroke();
+
+  const size=Math.hypot(lm[0].x-lm[9].x, lm[0].y-lm[9].y)||1;
+  const pinchR=Math.hypot(lm[4].x-lm[8].x, lm[4].y-lm[8].y)/size;
+  let curl=0;
+  for(const t of [8,12,16,20]) curl+=Math.hypot(lm[t].x-lm[0].x, lm[t].y-lm[0].y);
+  curl=(curl/4)/size;
+
+  if(curl<FIST_ON) fisted=true; else if(curl>FIST_OFF) fisted=false;
+  pinchAmt=Math.max(0,Math.min(1,(PINCH_OFF-pinchR)/(PINCH_OFF-PINCH_ON)));
+
+  dot.className='dot live';
+
+  if(fisted){
+    /* closed hand scrolls whatever list is under it */
+    const hx=fx.f(px(9),now), hy=fy.f(py(9),now);
+    setHover(null);
+    if(grabPrev){
+      if(!scroller){ const el=document.elementFromPoint(hx,hy); scroller=el?findScroller(el):null; }
+      if(scroller) scroller.scrollTop -= (hy-grabPrev.y)*2.1;
+    }else{ scroller=null; }
+    grabPrev={x:hx,y:hy};
+    x=hx; y=hy;
+    stateEl.textContent='Scrolling';
+    say('Open your hand to point again');
+    return;
+  }
+
+  grabPrev=null; scroller=null;
+  x=fx.f(px(8),now); y=fy.f(py(8),now);      // pointer rides the index fingertip
+  setHover(elementAt(x,y));
+
+  if(pinchR<PINCH_ON && !pinching){
+    pinching=true;
+    if(armed){
+      armed=false;
+      const hit=commit(x,y);
+      setTimeout(()=>{ armed=true; }, REARM_MS);
+      if(!hit) say('Point at a button first', 1100);
+    }
+  }else if(pinchR>PINCH_OFF && pinching){ pinching=false; }
+
+  stateEl.textContent = hover ? 'On a button' : 'Pointing';
+  say(hover ? 'Pinch to choose' : '');
+}
+
+/* ---------- draw the pointer ---------- */
+let frames=0, fpsT=performance.now();
+function loop(){
+  if(!running) return;
+  const now=performance.now();
+  if(enabled) read(now);
+
+  cctx.clearRect(0,0,innerWidth,innerHeight);
+
+  if(x>-9000){
+    const closing=pinchAmt;
+    const ring=fisted ? 30 : 30-closing*15;
+    const warm=hover||closing>0.05;
+
+    const g=cctx.createRadialGradient(x,y,0,x,y,ring*2.4);
+    g.addColorStop(0, warm?'rgba(226,86,43,.34)':'rgba(23,19,16,.20)');
+    g.addColorStop(1,'rgba(226,86,43,0)');
+    cctx.fillStyle=g; cctx.beginPath(); cctx.arc(x,y,ring*2.4,0,TAU); cctx.fill();
+
+    cctx.lineWidth=fisted?4:3;
+    cctx.strokeStyle = warm ? 'rgba(226,86,43,.95)' : 'rgba(23,19,16,.62)';
+    cctx.beginPath(); cctx.arc(x,y,ring,0,TAU); cctx.stroke();
+
+    cctx.fillStyle = warm ? 'rgba(226,86,43,.95)' : 'rgba(23,19,16,.72)';
+    cctx.beginPath(); cctx.arc(x,y,fisted?7:5,0,TAU); cctx.fill();
+  }
+
+  for(let i=bursts.length-1;i>=0;i--){
+    const b=bursts[i];
+    b.r+=REDUCED?26:9; b.life-=REDUCED?.2:.06;
+    if(b.life<=0){ bursts.splice(i,1); continue; }
+    cctx.strokeStyle='rgba(226,86,43,'+b.life.toFixed(2)+')';
+    cctx.lineWidth=3; cctx.beginPath(); cctx.arc(b.x,b.y,b.r,0,TAU); cctx.stroke();
+  }
+
+  frames++;
+  if(now-fpsT>500){ fpsEl.textContent=Math.round(frames*1000/(now-fpsT))+' fps'; frames=0; fpsT=now; }
+  requestAnimationFrame(loop);
+}
+
+/* the camera stops when the kiosk is backgrounded, and resumes on return */
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){ standDown(''); }
+  else if(enabled && running){ seenAt=performance.now(); requestAnimationFrame(loop); }
+});
+</script>
+</body>
+</html>
